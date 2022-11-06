@@ -6,6 +6,7 @@ jobs:
   main:
     runs-on: ubuntu-latest
     steps:
-      - run: |
-        apt-get install ffmpeg
-        ffmpeg -version
+      - name: Run command
+        run: |
+          apt-get install ffmpeg
+          ffmpeg -version

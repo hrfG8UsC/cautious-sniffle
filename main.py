@@ -8,6 +8,7 @@ from pathlib import Path
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 import time
 from typing import Generator
@@ -57,8 +58,7 @@ TweetData = namedtuple("TweetData", [
 
 
 def main():
-    username = "skinnyboyonweb"
-    username = "JadenHeart3"
+    username = sys.argv[1]
     tempdir = Path("dl")
     tempdir.mkdir()
     with requests.Session() as session:
@@ -86,8 +86,10 @@ def _download_tweet_data(tweet_data: TweetData, directory: Path):
     downloaded_file_names = []
 
     json_target = directory / f'tw_info_{t}.json'
+    json_data = tweet_data._asdict()
+    json_data["downloaded_at"] = datetime.now(tz=timezone.utc).isoformat()
     with open(json_target, 'w+', encoding='utf-8') as f:
-        json.dump(tweet_data, f, ensure_ascii=False, default=vars, indent=2)
+        json.dump(json_data, f, ensure_ascii=False, indent=2)
     downloaded_file_names.append(json_target)
 
     for i, photo_url in enumerate(tweet_data.photo_urls):
@@ -154,7 +156,7 @@ def _parse_tweet_element(tweet_element: TweetElementWithInstance) -> TweetData:
     return TweetData(
         _parse_tweet_link(tweet_element),
         _parse_tweet_author(tweet_element),
-        _parse_tweet_date(tweet_element).isoformat() + 'Z',
+        _parse_tweet_date(tweet_element).isoformat(),
         *_parse_tweet_text(tweet_element),
         list(_parse_tweet_photos(tweet_element)),
         *_parse_tweet_video(tweet_element)

@@ -11,3 +11,9 @@ jobs:
       - name: Run command
         run: |
           ffmpeg -version
+          ffmpeg -i "https://nitter.it/video/FF5A07A92B593/https%3A%2F%2Fvideo.twimg.com%2Famplify_video%2F1253759641718308864%2Fpl%2FgUTgJhnQ_leBe_cP.m3u8%3Ftag%3D13" -c copy video.mp4
+      - uses: actions/upload-artifact@v3
+        with:
+          name: video.mp4
+          path: video.mp4
+

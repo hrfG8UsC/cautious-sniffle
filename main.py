@@ -127,7 +127,7 @@ def _fetch_tweet_elements(session: requests.Session, username: str) -> Generator
         for tweet_element in tweet_selector(root):
             yield TweetElementWithInstance(instance_url, tweet_element)
 
-        showmore_link: etree._Element = _safe_select("div.show-more > a[href]", root)
+        showmore_link: etree._Element = _safe_select("div.show-more > a[href]", root, last=True)
         if showmore_link is None:
             break
         cursor = showmore_link.get("href")
@@ -144,12 +144,12 @@ def _get_random_nitter_instance_url(session: requests.Session) -> str:
     return _get_random_nitter_instance_url(session)
 
 
-def _safe_select(css_selector: str, element) -> "etree._Element|None":
-    """Get the first element matching the selector, and `None` if nothing matches."""
+def _safe_select(css_selector: str, element, last = False) -> "etree._Element|None":
+    """Get the first/last element matching the selector, and `None` if nothing matches."""
     sel = CSSSelector(css_selector)
     list_of_elements = sel(element)
     if len(list_of_elements) > 0:
-        return list_of_elements[0]
+        return list_of_elements[-1 if last else 0]
 
 
 def _parse_tweet_element(tweet_element: TweetElementWithInstance) -> TweetData:

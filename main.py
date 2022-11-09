@@ -122,8 +122,14 @@ def _fetch_tweet_elements(session: requests.Session, username: str) -> Generator
         print("request no.", pagecount, pagelink)
         response = session.get(pagelink)
         response.raise_for_status()
-
         root: etree._Element = etree.fromstring(response.text)
+
+        enable_hls_link = _safe_select('div.video-overlay > form[action="/enablehls"]', root)
+        if enable_hls_link is not None:
+            print("HLS disabled, have to switch instance")
+            pagecount -= 1
+            continue
+
         for tweet_element in tweet_selector(root):
             yield TweetElementWithInstance(instance_url, tweet_element)
 

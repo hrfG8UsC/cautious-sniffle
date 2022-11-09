@@ -2,6 +2,11 @@ name: Manual
 
 on:
   workflow_dispatch:
+    inputs:
+      username:
+        description: 'User name'
+        required: true
+        type: string
 
 jobs:
   main:
@@ -14,9 +19,9 @@ jobs:
       - uses: FedericoCarboni/setup-ffmpeg@v2
 
       - run: pip install -r requirements.txt
-      - run: python3 main.py
+      - run: python3 main.py ${{ inputs.username }}
 
       - uses: actions/upload-artifact@v3
         with:
-          name: artifact
+          name: ${{ inputs.username }}
           path: dl/

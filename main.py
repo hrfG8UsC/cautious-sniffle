@@ -82,7 +82,7 @@ def _download_tweet_data(tweet_data: TweetData, directory: Path):
     print('Video thumbnail:', tweet_data.videothumb_url)
     print('+' * 20)
 
-    t = str(round(time.time()))
+    t = str(time.time())
     downloaded_file_names = []
 
     json_target = directory / f'tw_info_{t}.json'

@@ -1,181 +1,236 @@
-from datetime import datetime, timedelta, timezone
+from collections import namedtuple
+from datetime import datetime, timezone
 import json
-import math
+import html
+from html.parser import HTMLParser
 import os
 from pathlib import Path
 import re
 import shutil
+import subprocess
 import tempfile
 import time
+from typing import Generator
+from urllib.parse import urlparse
 
 from lxml import etree
+from lxml.cssselect import CSSSelector
 from mega import Mega
 import requests
 
 
 mebibyte = 1024 ** 2
 CHUNK_SIZE = 300 * mebibyte # size for chunk-downloading of images and videos
+FFMPEG_BIN = "ffmpeg"
+
+# format is e.g.: Nov 1, 2022 · 4:34 PM UTC
+TWEET_DATE_PATTERN = re.compile(
+    r'^(?P<month>\w{3}) (?P<day>\d\d?), (?P<year>\d{4}) · '
+    r'(?P<hour>[01]?\d):(?P<minute>\d\d) (?P<ampm>AM|PM) UTC$'
+)
+MONTHS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"]
+
+
+class HtmlStripper(HTMLParser):
+    """Remove all HTML markup and only keep the text content."""
+    stripped_text = ''
+    def handle_data(self, data):
+        self.stripped_text += data
+
+
+TweetElementWithInstance = namedtuple("TweetElementWithInstance", [
+    "instance_url",  # str
+    "element"  # etree._Element
+])
+
+
+TweetData = namedtuple("TweetData", [
+    "link",
+    "author_fullname",
+    "timestamp",
+    "text_html",
+    "text_plain",
+    "photo_urls",
+    "video_url",
+    "videothumb_url"
+])
 
 
 def main():
     username = "skinnyboyonweb"
-    username = "T4stytwink"
-    with requests.Session() as s:
-        tweets_datas = _do(s, username)
-    _upload_tweets_to_mega(tweets_datas, username)
+    username = "JadenHeart3"
+    tempdir = Path("dl")
+    tempdir.mkdir()
+    with requests.Session() as session:
+        for tweet_element in _fetch_tweet_elements(session, username):
+            tweet_data = _parse_tweet_element(tweet_element)
+            downloaded_files = _download_tweet_data(tweet_data, tempdir)
 
 
-class TemporaryLocalDownloadDir():
-    """Prepare temporary download directory.
+def _download_tweet_data(tweet_data: TweetData, directory: Path):
+    print()
+    print('+' * 20)
+    print(tweet_data.link)
+    print(f'By: {tweet_data.author_fullname}')
+    print(f'At: {tweet_data.timestamp}')
+    print(f'HTML: {tweet_data.text_html}')
+    print(f'Stripped: {tweet_data.text_plain}')
+    print('Photos:', 'None' if not tweet_data.photo_urls else '')
+    for p in tweet_data.photo_urls:
+        print(f'* {p}')
+    print('Video:', tweet_data.video_url)
+    print('Video thumbnail:', tweet_data.videothumb_url)
+    print('+' * 20)
 
-    The files will be downloaded to this local directory, in order to upload
-    them to MEGA from there.
-    """
+    t = str(round(time.time()))
+    downloaded_file_names = []
 
-    def __init__(self):
-        child = f'tw_{time.strftime("%Y-%m-%dT%H-%M-%SZ", time.gmtime())}'
-        # e.g. /tmp/tw_...
-        self.dirname = (Path(tempfile.gettempdir()) / child).resolve()
+    json_target = directory / f'tw_info_{t}.json'
+    with open(json_target, 'w+', encoding='utf-8') as f:
+        json.dump(tweet_data, f, ensure_ascii=False, default=vars, indent=2)
+    downloaded_file_names.append(json_target)
 
-    def __enter__(self):
-        try:
-            os.mkdir(self.dirname)
-        except FileExistsError:
-            # directory already exists for whatever reason, no problem
-            pass
-        return self.dirname
+    for i, photo_url in enumerate(tweet_data.photo_urls):
+        photo_target = directory / f'tw_photo_{t}_{i}.jpg'
+        _download_something_to_local_fs(photo_url, photo_target)
+        downloaded_file_names.append(photo_target)
 
-    def __exit__(self, exc_type, exc_value, exc_traceback):
-        shutil.rmtree(self.dirname)
+    if tweet_data.video_url:
+        video_target = directory / f'tw_video_{t}.mp4'
+        cmd = [FFMPEG_BIN, "-i", tweet_data.video_url, "-c", "copy", str(video_target)]
+        subprocess.call(cmd)
+        downloaded_file_names.append(video_target)
+        thumb_target = directory / f'tw_thumb_{t}.jpg'
+        _download_something_to_local_fs(tweet_data.videothumb_url, thumb_target)
+        downloaded_file_names.append(thumb_target)
 
-
-def _do(session: requests.Session, username: str):
-    tweets_datas = _get_cached_if_not_missed(username, timedelta(days=1))
-    if not tweets_datas:
-        tweets_datas = []
-        medias = f"https://nitter.it/{username}/media"
-        tweet_ids = []
-        pagecount = 0
-        pagelink = medias
-        while True:
-            pagecount += 1
-            print("request no.", pagecount, pagelink)
-            response = session.get(pagelink)
-            response.raise_for_status()
-            root: etree._Element = etree.fromstring(response.text)
-
-            tweets_on_this_page: list[etree._Element] = [
-                e for e in root.find(".//div[@class='timeline']")
-                if "timeline-item" in e.get("class")
-            ]
-            for tweet in tweets_on_this_page:
-                tweetlink = tweet[0].get("href")
-                match = re.search(r"/status/(\d+)(?:#.*)?$", tweetlink)
-                if match:
-                    tweet_ids.append(match.group(1))
-
-            showmore_link: etree._Element = root.find(".//div[@class='show-more']/a[@href]")
-            if showmore_link is None:
-                break
-            cursor = showmore_link.get("href")
-            pagelink = medias + cursor
-
-        print()
-        print(tweet_ids)
-
-        base_url = "https://cdn.syndication.twimg.com/tweet?id="
-        for tweet_id in tweet_ids:
-            response = session.get(base_url + tweet_id)
-            tweets_datas.append(response.json())
-
-        with open('.cache-' + username, 'w+', encoding='utf-8') as f:
-            cachejson = {
-                'ts': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
-                'data': tweets_datas
-            }
-            json.dump(cachejson, f, indent=2)
-
-    return tweets_datas
+    return downloaded_file_names
 
 
-def _upload_tweets_to_mega(tweets_datas, username):
-    mega = Mega()
-    mega.login(*_load_mega_creds())
+def _fetch_tweet_elements(session: requests.Session, username: str) -> Generator[TweetElementWithInstance, None, None]:
+    tweet_selector = CSSSelector("div.timeline > div.timeline-item")
+    pagecount = 0
+    cursor = ''
+    one_page_only = True  # for debug
+    while True and (pagecount < 1 if one_page_only else True):
+        pagecount += 1
+
+        instance_url = _get_random_nitter_instance_url(session)
+        pagelink = f"{instance_url}/{username}/media{cursor}"
+        print("request no.", pagecount, pagelink)
+        response = session.get(pagelink)
+        response.raise_for_status()
+
+        root: etree._Element = etree.fromstring(response.text)
+        for tweet_element in tweet_selector(root):
+            yield TweetElementWithInstance(instance_url, tweet_element)
+
+        showmore_link: etree._Element = _safe_select("div.show-more > a[href]", root)
+        if showmore_link is None:
+            break
+        cursor = showmore_link.get("href")
 
 
-    for tweet_data in tweets_datas:
-        photo_urls = [p.get('url') for p in tweet_data.get('photos', [])]
-        video_thumbnail_url = tweet_data.get('video', {}).get('poster')
-        video_url = None
-        video_variants = tweet_data.get('video', {}).get('variants', [])
-        for variant in video_variants:
-            video_url = variant.get('src')
-            if video_url is not None and variant.get('type') == 'video/mp4':
-                break
-
-        print()
-        print('+' * 20)
-        print(f'https://nitter.it/i/status/{tweet_data.get("id_str", "")}')
-        print('Photos:', 'None' if not photo_urls else '')
-        _ = [print('* ' + p) for p in photo_urls]
-        print('Video:', video_url)
-        print('Video thumbnail:', video_thumbnail_url)
-        print('+' * 20)
-
-        downloaded_files = []
-        with TemporaryLocalDownloadDir() as dirname:
-            t = str(round(time.time()))
-            json_target = dirname / f'tw_info_{t}.json'
-            with open(json_target, 'w+', encoding='utf-8') as f:
-                json.dump(tweet_data, f)
-            downloaded_files.append(json_target)
-            photo_targets = None
-            video_target = None
-            if photo_urls:
-                photo_targets = [dirname / f'tw_photo_{t}_{i}.jpg' for i in range(len(photo_urls))]
-                for j, url in enumerate(photo_urls):
-                    _download_something_to_local_fs(url, photo_targets[j])
-                    downloaded_files.append(photo_targets[j])
-            if video_url:
-                video_target = dirname / f'tw_video_{t}.mp4'
-                _download_something_to_local_fs(video_url, video_target)
-                downloaded_files.append(video_target)
-                thumb_target = dirname / f'tw_thumb_{t}.jpg'
-                _download_something_to_local_fs(video_thumbnail_url, thumb_target)
-                downloaded_files.append(thumb_target)
-
-            print(f'Downloaded files: {downloaded_files}')
-            for filename in downloaded_files:
-                _upload_to_mega(mega, filename, 'tw/' + username)
+def _get_random_nitter_instance_url(session: requests.Session) -> str:
+    # https://farside.link/
+    # https://twiiit.com/
+    # https://xnaas.github.io/nitter-instances/
+    # https://github.com/zedeus/nitter/wiki/Instances
+    response = session.get("https://twiiit.com/twitter")
+    if response.ok:
+        return "https://" + urlparse(response.url).hostname
+    return _get_random_nitter_instance_url(session)
 
 
+def _safe_select(css_selector: str, element) -> "etree._Element|None":
+    """Get the first element matching the selector, and `None` if nothing matches."""
+    sel = CSSSelector(css_selector)
+    list_of_elements = sel(element)
+    if len(list_of_elements) > 0:
+        return list_of_elements[0]
 
-    mega.logout_session()
+
+def _parse_tweet_element(tweet_element: TweetElementWithInstance) -> TweetData:
+    return TweetData(
+        _parse_tweet_link(tweet_element),
+        _parse_tweet_author(tweet_element),
+        _parse_tweet_date(tweet_element).isoformat() + 'Z',
+        *_parse_tweet_text(tweet_element),
+        list(_parse_tweet_photos(tweet_element)),
+        *_parse_tweet_video(tweet_element)
+    )
 
 
-def _get_cached_if_not_missed(username: str, period: timedelta):
-    try:
-        with open('.cache-' + username, encoding='utf-8') as f:
-            data = json.load(f)
-    except FileNotFoundError:
+def _parse_tweet_author(tweet_element: TweetElementWithInstance) -> str:
+    fullname_link = _safe_select("a.fullname", tweet_element.element)
+    if fullname_link is None:
+        return ''
+    return fullname_link.text
+
+
+def _parse_tweet_date(tweet_element: TweetElementWithInstance) -> datetime:
+    fallback_date = datetime.fromtimestamp(0, tz=timezone.utc)
+    date_link = _safe_select(".tweet-date > a:first-child", tweet_element.element)
+    if date_link is None:
+        return fallback_date
+    tweet_date = html.unescape(date_link.get("title"))
+    match = TWEET_DATE_PATTERN.match(tweet_date)
+    if not match:
+        return fallback_date
+    hour = int(match.group("hour"))
+    hour += 12 if match.group("ampm") == "PM" and hour != 12 else 0
+    month = match.group("month").lower()
+    if month not in MONTHS:
+        return fallback_date
+    return datetime(
+        month = MONTHS.index(month) + 1,
+        day = int(match.group("day")),
+        year = int(match.group("year")),
+        hour = hour,
+        minute = int(match.group("minute")),
+        tzinfo = timezone.utc
+    )
+
+
+def _parse_tweet_link(tweet_element: TweetElementWithInstance) -> str:
+    tweet_link = _safe_select(".tweet-link", tweet_element.element)
+    if tweet_link is None:
+        return ''
+    return tweet_element.instance_url + tweet_link.get("href")
+
+
+def _parse_tweet_text(tweet_element: TweetElementWithInstance) -> tuple[str, str]:
+    content_div = _safe_select("div.tweet-content.media-body", tweet_element.element)
+    if content_div is None:
+        return '', ''
+    tweet_html = etree.tostring(content_div).decode().strip()
+    parser = HtmlStripper()
+    parser.feed(tweet_html)
+    tweet_plaintext = parser.stripped_text.strip()
+    return tweet_html, tweet_plaintext
+
+
+def _parse_tweet_photos(tweet_element: TweetElementWithInstance) -> Generator[str, None, None]:
+    attachments_div = _safe_select("div.attachments", tweet_element.element)
+    if attachments_div is None:
         return
-    cache_timestamp_str = data.get('ts')
-    if cache_timestamp_str is None:
-        return
-    cache_timestamp = datetime.strptime(cache_timestamp_str, '%Y-%m-%dT%H:%M:%S%z')
-    cache_age = cache_timestamp - datetime.now(tz=timezone.utc)
-    print(f'{cache_age=}')
-    if cache_age < period:
-        return data.get('data')
+    for image_link_element in CSSSelector("a.still-image")(attachments_div):
+        yield tweet_element.instance_url + image_link_element.get("href")
+    for gif_element in CSSSelector("video.gif")(attachments_div):
+        yield tweet_element.instance_url + gif_element.get("src")
 
 
-def _upload_to_mega(mega: Mega, filename: str, target_folder_on_mega: str):
-    print(f'Uploading {filename} to MEGA...')
-    if mega.find(filename, exclude_deleted=True) is None:
-        mega.upload(filename, mega.find(target_folder_on_mega)[0])
-        print('Upload finished.')
-    else:
-        print('Already exists. Skipped.')
+def _parse_tweet_video(tweet_element: TweetElementWithInstance) -> tuple[str, str]:
+    attachments_div = _safe_select("div.attachments", tweet_element.element)
+    if attachments_div is None:
+        return '', ''
+    video_element = _safe_select(".video-container > video", attachments_div)
+    if video_element is None:
+        return '', ''
+    return (
+        tweet_element.instance_url + video_element.get("data-url"),
+        tweet_element.instance_url + video_element.get("poster")
+    )
 
 
 def _download_something_to_local_fs(url: str, target_file):

@@ -113,7 +113,7 @@ def _fetch_tweet_elements(session: requests.Session, username: str) -> Generator
     tweet_selector = CSSSelector("div.timeline > div.timeline-item")
     pagecount = 0
     cursor = ''
-    one_page_only = True  # for debug
+    one_page_only = False  # for debug
     while True and (pagecount < 1 if one_page_only else True):
         pagecount += 1
 

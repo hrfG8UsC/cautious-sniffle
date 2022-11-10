@@ -146,7 +146,9 @@ def _get_random_nitter_instance_url(session: requests.Session) -> str:
     # https://github.com/zedeus/nitter/wiki/Instances
     response = session.get("https://twiiit.com/twitter")
     if response.ok:
-        return "https://" + urlparse(response.url).hostname
+        hostname = urlparse(response.url).hostname
+        if hostname not in ("nitter.esmailelbob.xyz",):
+            return "https://" + hostname
     return _get_random_nitter_instance_url(session)
 
 

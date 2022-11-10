@@ -110,7 +110,7 @@ def _download_tweet_data(tweet_data: TweetData, directory: Path):
 
 
 def _fetch_tweet_elements(session: requests.Session, username: str) -> Generator[TweetElementWithInstance, None, None]:
-    tweet_selector = CSSSelector("div.timeline > div.timeline-item")
+    tweet_selector = CSSSelector("div.timeline > div.timeline-item:not(.show-more)")
     pagecount = 0
     cursor = ''
     one_page_only = False  # for debug

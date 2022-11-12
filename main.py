@@ -147,7 +147,12 @@ def _get_random_nitter_instance_url(session: requests.Session) -> str:
     response = session.get("https://twiiit.com/twitter")
     if response.ok:
         hostname = urlparse(response.url).hostname
-        if hostname not in ("nitter.esmailelbob.xyz",):
+        bad_instances = (
+            "nitter.esmailelbob.xyz",  # old video format
+            "nitter.sneed.network",  # no medias
+            "n.sneed.network",  # no medias
+        )
+        if hostname not in bad_instances:
             return "https://" + hostname
     return _get_random_nitter_instance_url(session)
 

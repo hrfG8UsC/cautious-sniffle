@@ -75,9 +75,20 @@ class NitterInstanceSwitcher():
     current_instance = ''
 
     bad_instances = {
+        # instances that use Cloudflare are bad because it messes with the .m3u8
+        # video playlist files randomly; for list see
+        # https://github.com/zedeus/nitter/wiki/Instances#public
         "nitter.esmailelbob.xyz",  # old video format
-        "nitter.sneed.network",  # no medias
-        "n.sneed.network",  # no medias
+        "nitter.domain.glass",  # cloudflare
+        "nitter.winscloud.net",  # cloudflare
+        "twtr.bch.bar",  # cloudflare
+        "twitter.dr460nf1r3.org",  # cloudflare
+        "nitter.garudalinux.org",  # cloudflare
+        "nitter.rawbit.ninja",  # cloudflare
+        "nitter.privacytools.io",  # cloudflare
+        "nitter.sneed.network",  # cloudflare, no medias
+        "n.sneed.network",  # cloudflare, no medias
+        "nitter.d420.de",  # cloudflare
     }
 
     @classmethod

@@ -24,12 +24,40 @@ mebibyte = 1024 ** 2
 CHUNK_SIZE = 300 * mebibyte # size for chunk-downloading of images and videos
 FFMPEG_BIN = "ffmpeg"
 
+one_page_only = False  # for debug
+
+IS_GH_ACTION = os.getenv("GITHUB_ACTION") is not None
+
 # format is e.g.: Nov 1, 2022 · 4:34 PM UTC
 TWEET_DATE_PATTERN = re.compile(
     r'^(?P<month>\w{3}) (?P<day>\d\d?), (?P<year>\d{4}) · '
     r'(?P<hour>[01]?\d):(?P<minute>\d\d) (?P<ampm>AM|PM) UTC$'
 )
 MONTHS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"]
+
+
+class TemporaryLocalDownloadDir():
+    """Prepare temporary download directory.
+
+    The files will be downloaded to this local directory, in order to upload
+    them to MEGA from there.
+    """
+
+    def __init__(self):
+        child = f'tw_{time.strftime("%Y-%m-%dT%H-%M-%SZ", time.gmtime())}'
+        # e.g. /tmp/tw_...
+        self.dirname = (Path(tempfile.gettempdir()) / child).resolve()
+
+    def __enter__(self):
+        try:
+            os.mkdir(self.dirname)
+        except FileExistsError:
+            # directory already exists for whatever reason, no problem
+            pass
+        return self.dirname
+
+    def __exit__(self, exc_type, exc_value, exc_traceback):
+        shutil.rmtree(self.dirname)
 
 
 class HtmlStripper(HTMLParser):
@@ -57,14 +85,12 @@ TweetData = namedtuple("TweetData", [
 ])
 
 
-def main():
-    username = sys.argv[1]
-    tempdir = Path("dl")
-    tempdir.mkdir()
+def main(username: str, tempdir: Path):
     with requests.Session() as session:
         for tweet_element in _fetch_tweet_elements(session, username):
             tweet_data = _parse_tweet_element(tweet_element)
             downloaded_files = _download_tweet_data(tweet_data, tempdir)
+        # _upload_tweets_to_mega(tweets_datas, username, True)
 
 
 def _download_tweet_data(tweet_data: TweetData, directory: Path):
@@ -114,7 +140,6 @@ def _fetch_tweet_elements(session: requests.Session, username: str) -> Generator
     pagecount = 0
     instance_switches_due_to_lxmlerror = 0
     cursor = ''
-    one_page_only = False  # for debug
     while True and (pagecount < 1 if one_page_only else True):
         pagecount += 1
 
@@ -247,6 +272,8 @@ def _parse_tweet_photos(tweet_element: TweetElementWithInstance) -> Generator[st
 
 
 def _parse_tweet_video(tweet_element: TweetElementWithInstance) -> tuple[str, str]:
+    # this instance apparently uses a different format:
+    # https://nitter.esmailelbob.xyz/hypersupermia/status/1587660697235853313#m
     attachments_div = _safe_select("div.attachments", tweet_element.element)
     if attachments_div is None:
         return '', ''
@@ -257,6 +284,32 @@ def _parse_tweet_video(tweet_element: TweetElementWithInstance) -> tuple[str, st
         tweet_element.instance_url + video_element.get("data-url"),
         tweet_element.instance_url + video_element.get("poster")
     )
+
+
+
+def _upload_tweets_to_mega(tweets_datas, username, no_dl = False):
+    if not no_dl:
+        mega = Mega()
+        mega.login(*_load_mega_creds())
+
+
+    for tweet_data in tweets_datas:
+        downloaded_files = []
+        print(f'Downloaded files: {downloaded_files}')
+        for filename in downloaded_files:
+            _upload_to_mega(mega, filename, 'tw/' + username)
+
+    if not no_dl:
+        mega.logout_session()
+
+
+def _upload_to_mega(mega: Mega, filename: str, target_folder_on_mega: str):
+    print(f'Uploading {filename} to MEGA...')
+    if mega.find(filename, exclude_deleted=True) is None:
+        mega.upload(filename, mega.find(target_folder_on_mega)[0])
+        print('Upload finished.')
+    else:
+        print('Already exists. Skipped.')
 
 
 def _download_something_to_local_fs(url: str, target_file):
@@ -287,4 +340,16 @@ def _load_mega_creds():
 
 
 if __name__ == "__main__":
-    main()
+    if IS_GH_ACTION:
+        username = sys.argv[1]
+        tempdir = Path("dl")
+        tempdir.mkdir()
+        main(username, tempdir)
+    else:
+        username = "skinnyboyonweb"
+        username = "T4stytwink"
+        username = "NetflixNordic"
+        username = "conorsworld2003"
+        username = "JadenHeart3"
+        with TemporaryLocalDownloadDir() as tempdir:
+            main(username, tempdir)

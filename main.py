@@ -60,6 +60,42 @@ class TemporaryLocalDownloadDir():
         shutil.rmtree(self.dirname)
 
 
+class NitterInstanceSwitcher():
+    # https://farside.link/
+    # https://twiiit.com/
+    # https://xnaas.github.io/nitter-instances/
+    # https://github.com/zedeus/nitter/wiki/Instances
+
+    sleepseconds = 3
+    switches = 0
+    current_instance = ''
+
+    bad_instances = (
+        "nitter.esmailelbob.xyz",  # old video format
+        "nitter.sneed.network",  # no medias
+        "n.sneed.network",  # no medias
+    )
+
+    @classmethod
+    def new(cls, session: requests.Session) -> str:
+        if cls.switches > 0:
+            time.sleep(cls.sleepseconds)
+        # twiiit.com/twitter redirects to a random nitter instance
+        response = session.get("https://twiiit.com/twitter")
+        if response.ok:
+            hostname = urlparse(response.url).hostname
+            if hostname and hostname not in cls.bad_instances:
+                cls.switches += 1
+                previous_instance = cls.current_instance
+                cls.current_instance = "https://" + hostname
+                print(
+                    f"Nitter instance switch #{cls.switches}: "
+                    f"{previous_instance} --> {cls.current_instance}"
+                )
+                return cls.current_instance
+        return cls.new(session)  # switch unsuccessful, try again
+
+
 class HtmlStripper(HTMLParser):
     """Remove all HTML markup and only keep the text content."""
     stripped_text = ''
@@ -176,21 +212,7 @@ def _fetch_tweet_elements(session: requests.Session, username: str) -> Generator
 
 
 def _get_random_nitter_instance_url(session: requests.Session) -> str:
-    # https://farside.link/
-    # https://twiiit.com/
-    # https://xnaas.github.io/nitter-instances/
-    # https://github.com/zedeus/nitter/wiki/Instances
-    response = session.get("https://twiiit.com/twitter")
-    if response.ok:
-        hostname = urlparse(response.url).hostname
-        bad_instances = (
-            "nitter.esmailelbob.xyz",  # old video format
-            "nitter.sneed.network",  # no medias
-            "n.sneed.network",  # no medias
-        )
-        if hostname not in bad_instances:
-            return "https://" + hostname
-    return _get_random_nitter_instance_url(session)
+    return NitterInstanceSwitcher.new(session)
 
 
 def _safe_select(css_selector: str, element) -> "etree._Element|None":

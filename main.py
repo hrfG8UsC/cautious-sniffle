@@ -11,7 +11,8 @@ import subprocess
 import sys
 import tempfile
 import time
-from typing import Generator
+import traceback
+from typing import Generator, Iterable
 from urllib.parse import urlparse
 
 from lxml import etree
@@ -127,9 +128,12 @@ def main(username: str, tempdir: Path):
     with requests.Session() as session:
         session.headers.update({ "User-Agent": USER_AGENT })
         for tweet_element in _fetch_tweet_elements(session, username):
-            tweet_data = _parse_tweet_element(tweet_element)
-            downloaded_files = _download_tweet_data(tweet_data, tempdir)
-        # _upload_tweets_to_mega(tweets_datas, username, True)
+            try:
+                tweet_data = _parse_tweet_element(tweet_element)
+                downloaded_file_paths = _download_tweet_data(tweet_data, tempdir)
+                _upload_files_to_mega(downloaded_file_paths, 'tw/' + username)
+            except Exception:
+                traceback.print_exc()
 
 
 def _download_tweet_data(tweet_data: TweetData, directory: Path):
@@ -148,7 +152,7 @@ def _download_tweet_data(tweet_data: TweetData, directory: Path):
     print('+' * 20)
 
     t = str(time.time())
-    downloaded_file_names = []
+    downloaded_file_names: list[Path] = []
 
     json_target = directory / f'tw_info_{t}.json'
     json_data = tweet_data._asdict()
@@ -312,29 +316,18 @@ def _parse_tweet_video(tweet_element: TweetElementWithInstance) -> tuple[str, st
 
 
 
-def _upload_tweets_to_mega(tweets_datas, username, no_dl = False):
-    if not no_dl:
-        mega = Mega()
-        mega.login(*_load_mega_creds())
-
-
-    for tweet_data in tweets_datas:
-        downloaded_files = []
-        print(f'Downloaded files: {downloaded_files}')
-        for filename in downloaded_files:
-            _upload_to_mega(mega, filename, 'tw/' + username)
-
-    if not no_dl:
-        mega.logout_session()
-
-
-def _upload_to_mega(mega: Mega, filename: str, target_folder_on_mega: str):
-    print(f'Uploading {filename} to MEGA...')
-    if mega.find(filename, exclude_deleted=True) is None:
-        mega.upload(filename, mega.find(target_folder_on_mega)[0])
-        print('Upload finished.')
-    else:
-        print('Already exists. Skipped.')
+def _upload_files_to_mega(filepaths: Iterable[Path], target_folder: str):
+    mega = Mega()
+    mega.login(*_load_mega_creds())
+    for filepath in filepaths:
+        target_filename = filepath.name
+        print(f'Uploading {target_filename} to MEGA...')
+        if mega.find(target_filename, exclude_deleted=True) is None:
+            mega.upload(target_filename, mega.find(target_folder)[0])
+            print('Upload finished.')
+        else:
+            print('Already exists. Skipped.')
+    mega.logout_session()
 
 
 def _download_something_to_local_fs(url: str, target_file):

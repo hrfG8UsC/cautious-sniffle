@@ -125,9 +125,11 @@ TweetData = namedtuple("TweetData", [
 
 
 def main(username: str, tempdir: Path):
+    print("Hello world 1")
     with requests.Session() as session:
         session.headers.update({ "User-Agent": USER_AGENT })
         for tweet_element in _fetch_tweet_elements(session, username):
+            print("Hello world 2", tweet_element)
             try:
                 tweet_data = _parse_tweet_element(tweet_element)
                 downloaded_file_paths = _download_tweet_data(tweet_data, tempdir)
@@ -231,6 +233,7 @@ def _safe_select(css_selector: str, element) -> "etree._Element|None":
 
 
 def _parse_tweet_element(tweet_element: TweetElementWithInstance) -> TweetData:
+    print("Hello world 3", tweet_element)
     return TweetData(
         _parse_tweet_link(tweet_element),
         _parse_tweet_author(tweet_element),
@@ -372,10 +375,12 @@ def _load_mega_creds():
 
 
 if __name__ == "__main__":
+    print("Hello world 0", IS_GH_ACTION)
     if IS_GH_ACTION:
         username = sys.argv[1]
         tempdir = Path("dl")
         tempdir.mkdir()
+        print("Hello world 0")
         main(username, tempdir)
     else:
         username = "skinnyboyonweb"

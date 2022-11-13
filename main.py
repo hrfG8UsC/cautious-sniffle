@@ -112,6 +112,7 @@ def _download_tweet_data(tweet_data: TweetData, directory: Path):
 def _fetch_tweet_elements(session: requests.Session, username: str) -> Generator[TweetElementWithInstance, None, None]:
     tweet_selector = CSSSelector("div.timeline > div.timeline-item:not(.show-more)")
     pagecount = 0
+    instance_switches_due_to_lxmlerror = 0
     cursor = ''
     one_page_only = False  # for debug
     while True and (pagecount < 1 if one_page_only else True):
@@ -122,7 +123,17 @@ def _fetch_tweet_elements(session: requests.Session, username: str) -> Generator
         print("request no.", pagecount, pagelink)
         response = session.get(pagelink)
         response.raise_for_status()
-        root: etree._Element = etree.fromstring(response.text)
+
+        try:
+            root: etree._Element = etree.fromstring(response.text)
+        except etree.XMLSyntaxError:
+            instance_switches_due_to_lxmlerror += 1
+            print(
+                "XML syntax error, have to switch instance (#"
+                f"{instance_switches_due_to_lxmlerror})"
+            )
+            pagecount -= 1
+            continue
 
         enable_hls_link = _safe_select('div.video-overlay > form[action="/enablehls"]', root)
         if enable_hls_link is not None:

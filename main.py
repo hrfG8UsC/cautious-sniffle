@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 import json
 import html
 from html.parser import HTMLParser
+import logging
 import os
 from pathlib import Path
 import re
@@ -127,6 +128,12 @@ TweetData = namedtuple("TweetData", [
 
 
 def main(username: str, tempdir: Path):
+    megalogger = logging.getLogger("mega")
+    megalogger.setLevel(logging.DEBUG)
+    print_to_console = logging.StreamHandler()
+    print_to_console.setLevel(logging.DEBUG)
+    megalogger.addHandler(print_to_console)
+
     with requests.Session() as session:
         session.headers.update({ "User-Agent": USER_AGENT })
         for tweet_element in _fetch_tweet_elements(session, username):

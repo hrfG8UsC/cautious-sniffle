@@ -28,6 +28,8 @@ one_page_only = False  # for debug
 
 IS_GH_ACTION = os.getenv("GITHUB_ACTION") is not None
 
+USER_AGENT = "Mozilla/5.0 (Windows NT 6.3; Win64; x64; rv:103.0) Gecko/20100101 Firefox/103.0"
+
 # format is e.g.: Nov 1, 2022 · 4:34 PM UTC
 TWEET_DATE_PATTERN = re.compile(
     r'^(?P<month>\w{3}) (?P<day>\d\d?), (?P<year>\d{4}) · '
@@ -123,6 +125,7 @@ TweetData = namedtuple("TweetData", [
 
 def main(username: str, tempdir: Path):
     with requests.Session() as session:
+        session.headers.update({ "User-Agent": USER_AGENT })
         for tweet_element in _fetch_tweet_elements(session, username):
             tweet_data = _parse_tweet_element(tweet_element)
             downloaded_files = _download_tweet_data(tweet_data, tempdir)

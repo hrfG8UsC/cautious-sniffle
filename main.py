@@ -337,12 +337,8 @@ def _upload_files_to_mega(filepaths: Iterable[Path], target_folder_name: str):
 
     for filepath in filepaths:
         target_filename = filepath.name
-        print(f'Uploading {target_filename} to MEGA...')
-        if mega.find(target_filename, exclude_deleted=True) is None:
-            mega.upload(target_filename, target_folder)
-            print('Upload finished.')
-        else:
-            print('Already exists. Skipped.')
+        mega.upload(filepath, dest=target_folder, dest_filename=target_filename)
+        print(f'Uploaded {target_filename} to MEGA.')
 
     mega.logout_session()
 

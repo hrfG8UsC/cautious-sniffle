@@ -330,7 +330,7 @@ def _upload_files_to_mega(filepaths: Iterable[Path], target_folder_name: str):
         # folder does not exist, so create it
         node_ids = mega.create_folder(target_folder_name)
         print(f'Created new folder: {target_folder_name}')
-        target_folder = node_ids[target_folder_name]
+        target_folder = node_ids[target_folder_name.rsplit('/', maxsplit=1)[-1]]
     else:
         # folder exists
         target_folder = target_folder[0]

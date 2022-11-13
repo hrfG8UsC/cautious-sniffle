@@ -73,11 +73,11 @@ class NitterInstanceSwitcher():
     switches = 0
     current_instance = ''
 
-    bad_instances = (
+    bad_instances = {
         "nitter.esmailelbob.xyz",  # old video format
         "nitter.sneed.network",  # no medias
         "n.sneed.network",  # no medias
-    )
+    }
 
     @classmethod
     def new(cls, session: requests.Session) -> str:
@@ -93,9 +93,11 @@ class NitterInstanceSwitcher():
                 cls.current_instance = "https://" + hostname
                 print(
                     f"Nitter instance switch #{cls.switches}: "
-                    f"{previous_instance} --> {cls.current_instance}"
+                    f"{previous_instance or '(None)'} --> {cls.current_instance}"
                 )
                 return cls.current_instance
+            if hostname in cls.bad_instances:
+                print(f"Nitter instance switch unsuccessful: bad instance {hostname}")
         return cls.new(session)  # switch unsuccessful, try again
 
 
@@ -125,11 +127,9 @@ TweetData = namedtuple("TweetData", [
 
 
 def main(username: str, tempdir: Path):
-    print("Hello world 1")
     with requests.Session() as session:
         session.headers.update({ "User-Agent": USER_AGENT })
         for tweet_element in _fetch_tweet_elements(session, username):
-            print("Hello world 2", tweet_element)
             try:
                 tweet_data = _parse_tweet_element(tweet_element)
                 downloaded_file_paths = _download_tweet_data(tweet_data, tempdir)
@@ -198,6 +198,7 @@ def _fetch_tweet_elements(session: requests.Session, username: str) -> Generator
             root: etree._Element = etree.fromstring(response.text)
         except etree.XMLSyntaxError:
             instance_switches_due_to_lxmlerror += 1
+            NitterInstanceSwitcher.bad_instances.add(instance_url)
             print(
                 "XML syntax error, have to switch instance (#"
                 f"{instance_switches_due_to_lxmlerror})"
@@ -207,6 +208,7 @@ def _fetch_tweet_elements(session: requests.Session, username: str) -> Generator
 
         enable_hls_link = _safe_select('div.video-overlay > form[action="/enablehls"]', root)
         if enable_hls_link is not None:
+            NitterInstanceSwitcher.bad_instances.add(instance_url)
             print("HLS disabled, have to switch instance")
             pagecount -= 1
             continue
@@ -233,7 +235,6 @@ def _safe_select(css_selector: str, element) -> "etree._Element|None":
 
 
 def _parse_tweet_element(tweet_element: TweetElementWithInstance) -> TweetData:
-    print("Hello world 3", tweet_element)
     return TweetData(
         _parse_tweet_link(tweet_element),
         _parse_tweet_author(tweet_element),
@@ -300,7 +301,9 @@ def _parse_tweet_photos(tweet_element: TweetElementWithInstance) -> Generator[st
     for image_link_element in CSSSelector("a.still-image")(attachments_div):
         yield tweet_element.instance_url + image_link_element.get("href")
     for gif_element in CSSSelector("video.gif")(attachments_div):
-        yield tweet_element.instance_url + gif_element.get("src")
+        # no clue why, but this following "if" check is necessary for whatever reason
+        if gif_element is not None and gif_element.get("src") is not None:
+            yield tweet_element.instance_url + gif_element.get("src")
 
 
 def _parse_tweet_video(tweet_element: TweetElementWithInstance) -> tuple[str, str]:
@@ -371,12 +374,10 @@ def _load_mega_creds():
 
 
 if __name__ == "__main__":
-    print("Hello world 0", IS_GH_ACTION)
     if IS_GH_ACTION:
         username = sys.argv[1]
         tempdir = Path("dl")
         tempdir.mkdir()
-        print("Hello world 0")
         main(username, tempdir)
     else:
         username = "skinnyboyonweb"

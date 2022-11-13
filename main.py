@@ -315,18 +315,32 @@ def _parse_tweet_video(tweet_element: TweetElementWithInstance) -> tuple[str, st
     )
 
 
+def _upload_files_to_mega(filepaths: Iterable[Path], target_folder_name: str):
+    if len(filepaths) == 0:
+        return
 
-def _upload_files_to_mega(filepaths: Iterable[Path], target_folder: str):
     mega = Mega()
     mega.login(*_load_mega_creds())
+
+    target_folder = mega.find(target_folder_name, exclude_deleted=True)
+    if target_folder is None:
+        # folder does not exist, so create it
+        node_ids = mega.create_folder(target_folder_name)
+        print(f'Created new folder: {target_folder_name}')
+        target_folder = node_ids[target_folder_name]
+    else:
+        # folder exists
+        target_folder = target_folder[0]
+
     for filepath in filepaths:
         target_filename = filepath.name
         print(f'Uploading {target_filename} to MEGA...')
         if mega.find(target_filename, exclude_deleted=True) is None:
-            mega.upload(target_filename, mega.find(target_folder)[0])
+            mega.upload(target_filename, target_folder)
             print('Upload finished.')
         else:
             print('Already exists. Skipped.')
+
     mega.logout_session()
 
 

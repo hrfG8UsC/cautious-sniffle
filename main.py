@@ -45,6 +45,10 @@ class TemporaryLocalDownloadDir():
 
     The files will be downloaded to this local directory, in order to upload
     them to MEGA from there.
+
+    >>> with TemporaryLocalDownloadDir() as tmpdir:
+    ...     print(tmpdir)
+    /tmp/tw_2022-11-25T17-45-12Z
     """
 
     def __init__(self):
@@ -65,6 +69,13 @@ class TemporaryLocalDownloadDir():
 
 
 class NitterInstanceSwitcher():
+    """Manages switching between Nitter instances.
+
+    >>> instance = NitterInstanceSwitcher.new()
+    >>> print(instance)
+    https://nitter.net
+    """
+
     # https://farside.link/
     # https://twiiit.com/
     # https://xnaas.github.io/nitter-instances/
@@ -75,8 +86,8 @@ class NitterInstanceSwitcher():
     current_instance = ''
 
     bad_instances = {
-        # instances that use Cloudflare are bad because it messes with the .m3u8
-        # video playlist files randomly; for list see
+        # instances that use Cloudflare are bad because it messes with the
+        # .m3u8 video playlist files randomly; for list see
         # https://github.com/zedeus/nitter/wiki/Instances#public
         "nitter.esmailelbob.xyz",  # old video format
         "nitter.domain.glass",  # cloudflare
@@ -91,26 +102,36 @@ class NitterInstanceSwitcher():
         "nitter.d420.de",  # cloudflare
     }
 
+    request_errors = (requests.exceptions.ConnectionError, requests.exceptions.ReadTimeout)
+
+    @classmethod
+    def add_bad_instance(cls, instance_url: str):
+        cls.bad_instances.add(instance_url.removeprefix("https://"))
+
     @classmethod
     def new(cls, session: requests.Session) -> str:
-        if cls.switches > 0:
+        if cls.switches > 0:  # no sleep when doing the first switch ever
             time.sleep(cls.sleepseconds)
-        # twiiit.com/twitter redirects to a random nitter instance
-        response = session.get("https://twiiit.com/twitter")
-        if response.ok:
-            hostname = urlparse(response.url).hostname
-            if hostname and hostname not in cls.bad_instances:
-                cls.switches += 1
-                previous_instance = cls.current_instance
-                cls.current_instance = "https://" + hostname
-                print(
-                    f"Nitter instance switch #{cls.switches}: "
-                    f"{previous_instance or '(None)'} --> {cls.current_instance}"
-                )
-                return cls.current_instance
-            if hostname in cls.bad_instances:
-                print(f"Nitter instance switch unsuccessful: bad instance {hostname}")
-        return cls.new(session)  # switch unsuccessful, try again
+        try:
+            # twiiit.com/twitter redirects to a random nitter instance
+            response = session.get("https://twiiit.com/twitter")
+        except cls.request_errors as exc:
+            print(f"Nitter instance switch unsuccessful: {exc}")
+            return cls.new(session)  # try switch again
+        if not response.ok:
+            return cls.new(session)  # try switch again
+        hostname = urlparse(response.url).hostname
+        if not hostname or hostname in cls.bad_instances:
+            print(f'Nitter instance switch unsuccessful: bad instance "{hostname}"')
+            return cls.new(session)  # try switch again
+        cls.switches += 1
+        previous_instance = cls.current_instance or '(None)'
+        cls.current_instance = "https://" + hostname
+        print(
+            f"Nitter instance switch #{cls.switches}: "
+            f"{previous_instance} --> {cls.current_instance}"
+        )
+        return cls.current_instance
 
 
 class HtmlStripper(HTMLParser):
@@ -201,33 +222,36 @@ def _download_tweet_data(tweet_data: TweetData, directory: Path):
 def _fetch_tweet_elements(session: requests.Session, username: str) -> Generator[TweetElementWithInstance, None, None]:
     tweet_selector = CSSSelector("div.timeline > div.timeline-item:not(.show-more)")
     pagecount = 0
-    instance_switches_due_to_lxmlerror = 0
+    instance_url = ''
+    pages_until_instanceswitch = 0
     cursor = ''
     while True and (pagecount < 1 if one_page_only else True):
         pagecount += 1
+        pages_until_instanceswitch -= 1
 
-        instance_url = _get_random_nitter_instance_url(session)
+        if pages_until_instanceswitch <= 0:
+            pages_until_instanceswitch = 3
+            instance_url = _get_random_nitter_instance_url(session)
         pagelink = f"{instance_url}/{username}/media{cursor}"
-        print("request no.", pagecount, pagelink)
+        print(f"request no. {pagecount} {pagelink}")
         response = session.get(pagelink)
         response.raise_for_status()
 
         try:
-            root: etree._Element = etree.fromstring(response.text)
+            # the default parser raises an error when encountering unquoted attribute values
+            root: etree._Element = etree.fromstring(response.text, parser=etree.HTMLParser())
         except etree.XMLSyntaxError:
-            instance_switches_due_to_lxmlerror += 1
-            NitterInstanceSwitcher.bad_instances.add(instance_url)
-            print(
-                "XML syntax error, have to switch instance (#"
-                f"{instance_switches_due_to_lxmlerror})"
-            )
+            NitterInstanceSwitcher.add_bad_instance(instance_url)
+            print("XML syntax error, have to switch instance")
+            pages_until_instanceswitch = 0
             pagecount -= 1
             continue
 
         enable_hls_link = _safe_select('div.video-overlay > form[action="/enablehls"]', root)
         if enable_hls_link is not None:
-            NitterInstanceSwitcher.bad_instances.add(instance_url)
+            NitterInstanceSwitcher.add_bad_instance(instance_url)
             print("HLS disabled, have to switch instance")
+            pages_until_instanceswitch = 0
             pagecount -= 1
             continue
 

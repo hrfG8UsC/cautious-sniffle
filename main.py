@@ -154,6 +154,7 @@ TweetData = namedtuple("TweetData", [
     "text_html",
     "text_plain",
     "photo_urls",
+    "gif_urls",
     "video_url",
     "videothumb_url"
 ])
@@ -188,6 +189,9 @@ def _download_tweet_data(tweet_data: TweetData, directory: Path):
     print('Photos:', 'None' if not tweet_data.photo_urls else '')
     for p in tweet_data.photo_urls:
         print(f'* {p}')
+    print('GIFs:', 'None' if not tweet_data.gif_urls else '')
+    for p in tweet_data.gif_urls:
+        print(f'* {p}')
     print('Video:', tweet_data.video_url)
     print('Video thumbnail:', tweet_data.videothumb_url)
     print('+' * 20)
@@ -207,6 +211,11 @@ def _download_tweet_data(tweet_data: TweetData, directory: Path):
         _download_something_to_local_fs(photo_url, photo_target)
         downloaded_file_names.append(photo_target)
 
+    for i, gif_url in enumerate(tweet_data.gif_urls):
+        gif_target = directory / f'tw_gif_{t}_{i}.mp4'
+        _download_something_to_local_fs(gif_url, gif_target)
+        downloaded_file_names.append(gif_target)
+
     if tweet_data.video_url:
         video_target = directory / f'tw_video_{t}.mp4'
         cmd = [FFMPEG_BIN, "-i", tweet_data.video_url, "-c", "copy", str(video_target)]
@@ -220,7 +229,7 @@ def _download_tweet_data(tweet_data: TweetData, directory: Path):
 
 
 def _fetch_tweet_elements(session: requests.Session, username: str) -> Generator[TweetElementWithInstance, None, None]:
-    tweet_selector = CSSSelector("div.timeline > div.timeline-item:not(.show-more)")
+    tweet_selector = CSSSelector("div.timeline div.timeline-item:not(.show-more)")
     pagecount = 0
     instance_url = ''
     pages_until_instanceswitch = 0
@@ -247,6 +256,7 @@ def _fetch_tweet_elements(session: requests.Session, username: str) -> Generator
             pagecount -= 1
             continue
 
+        # if there is a video on this page and HLS is disabled, then switch instance
         enable_hls_link = _safe_select('div.video-overlay > form[action="/enablehls"]', root)
         if enable_hls_link is not None:
             NitterInstanceSwitcher.add_bad_instance(instance_url)
@@ -283,6 +293,7 @@ def _parse_tweet_element(tweet_element: TweetElementWithInstance) -> TweetData:
         _parse_tweet_date(tweet_element).isoformat(),
         *_parse_tweet_text(tweet_element),
         list(_parse_tweet_photos(tweet_element)),
+        list(_parse_tweet_gifs(tweet_element)),
         *_parse_tweet_video(tweet_element)
     )
 
@@ -342,7 +353,13 @@ def _parse_tweet_photos(tweet_element: TweetElementWithInstance) -> Generator[st
         return
     for image_link_element in CSSSelector("a.still-image")(attachments_div):
         yield tweet_element.instance_url + image_link_element.get("href")
-    for gif_element in CSSSelector("video.gif")(attachments_div):
+
+
+def _parse_tweet_gifs(tweet_element: TweetElementWithInstance) -> Generator[str, None, None]:
+    attachments_div = _safe_select("div.attachments", tweet_element.element)
+    if attachments_div is None:
+        return
+    for gif_element in CSSSelector("video.gif source")(attachments_div):
         # no clue why, but this following "if" check is necessary for whatever reason
         if gif_element is not None and gif_element.get("src") is not None:
             yield tweet_element.instance_url + gif_element.get("src")
@@ -427,5 +444,6 @@ if __name__ == "__main__":
         username = "NetflixNordic"
         username = "conorsworld2003"
         username = "JadenHeart3"
+        username = "tillwehaveface3"
         with TemporaryLocalDownloadDir() as tempdir:
             main(username, tempdir)

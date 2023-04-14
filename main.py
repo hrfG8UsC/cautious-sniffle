@@ -1,11 +1,13 @@
 from collections import namedtuple
 from datetime import datetime, timezone
+from enum import Enum, auto
 import json
 import html
 from html.parser import HTMLParser
 import logging
 import os
 from pathlib import Path
+import random
 import re
 import shutil
 import subprocess
@@ -13,7 +15,7 @@ import sys
 import tempfile
 import time
 import traceback
-from typing import Generator, Iterable
+from typing import Generator, Iterable, Literal
 from urllib.parse import urlparse
 
 from lxml import etree
@@ -68,6 +70,11 @@ class TemporaryLocalDownloadDir():
         shutil.rmtree(self.dirname)
 
 
+class FetchSource(Enum):
+    MEDIA = auto()  # the "media" tab
+    SEARCH = auto()  # the "search" tab
+
+
 class NitterInstanceSwitcher():
     """Manages switching between Nitter instances.
 
@@ -84,6 +91,7 @@ class NitterInstanceSwitcher():
     sleepseconds = 3
     switches = 0
     current_instance = ''
+    us_instances_only = False  # as of 2023-04-07, these are the only way to access age-restricted content, see https://github.com/zedeus/nitter/issues/829
 
     bad_instances = {
         # instances that use Cloudflare are bad because it messes with the
@@ -100,6 +108,17 @@ class NitterInstanceSwitcher():
         "nitter.sneed.network",  # cloudflare, no medias
         "n.sneed.network",  # cloudflare, no medias
         "nitter.d420.de",  # cloudflare
+        "nitter.caioalonso.com",  # appears to be down
+    }
+
+    _us_instances = None
+
+    us_instances_with_age_restriction = {
+        # these instances don't show age-restricted tweets even though they're
+        # hosted in the US (see above)
+        "birdsite.xanny.family",
+        "tweet.lambda.dance",
+        "nitter.pw",
     }
 
     request_errors = (requests.exceptions.ConnectionError, requests.exceptions.ReadTimeout)
@@ -109,21 +128,56 @@ class NitterInstanceSwitcher():
         cls.bad_instances.add(instance_url.removeprefix("https://"))
 
     @classmethod
-    def new(cls, session: requests.Session) -> str:
-        if cls.switches > 0:  # no sleep when doing the first switch ever
-            time.sleep(cls.sleepseconds)
+    def _get_random(cls, session: requests.Session) -> 'str|False':
+        """Return a random instance via twiiit.com or `False` if it failed."""
         try:
             # twiiit.com/twitter redirects to a random nitter instance
             response = session.get("https://twiiit.com/twitter")
         except cls.request_errors as exc:
             print(f"Nitter instance switch unsuccessful: {exc}")
-            return cls.new(session)  # try switch again
+            return False
         if not response.ok:
-            return cls.new(session)  # try switch again
-        hostname = urlparse(response.url).hostname
+            return False
+        return urlparse(response.url).hostname
+
+    @classmethod
+    def _get_random_us(cls, session: requests.Session):
+        """Return a random instance hosted in the US or `False` if it failed."""
+        if cls._us_instances is None:
+            response = session.get("https://raw.githubusercontent.com/wiki/zedeus/nitter/Instances.md")
+            response.raise_for_status()
+            instancelist_rawtext = response.text
+            us_flag_emoji = r'\U0001f1fa\U0001f1f8\ufe0f?'  # variant selector U+FE0F might or might not be included
+            world_globe_emoji = r'\U0001f30f\ufe0f?'
+            emojis = '|'.join([us_flag_emoji, world_globe_emoji])
+            pattern = re.compile(r'^\| *\[(.+?)\].*?\|.+?\|.+?\| *(?:' + emojis + r') *\|.+$', flags=re.M)
+            cls._us_instances = pattern.findall(instancelist_rawtext)
+        hostname = random.choice(cls._us_instances)
+        try:
+            response = session.get(f"https://{hostname}/twitter")
+        except cls.request_errors as exc:
+            print(f"Nitter instance switch unsuccessful: {exc}")
+            return False
+        if not response.ok:
+            return False
+        return hostname
+
+    @classmethod
+    def new(cls, session: requests.Session) -> str:
+        if cls.switches > 0:  # no sleep when doing the first switch ever
+            time.sleep(cls.sleepseconds)
+
+        if cls.us_instances_only:
+            hostname = cls._get_random_us(session)
+        else:
+            hostname = cls._get_random(session)
+
+        if hostname is False:
+            return cls.new()  # try switch again
         if not hostname or hostname in cls.bad_instances:
             print(f'Nitter instance switch unsuccessful: bad instance "{hostname}"')
             return cls.new(session)  # try switch again
+
         cls.switches += 1
         previous_instance = cls.current_instance or '(None)'
         cls.current_instance = "https://" + hostname
@@ -169,10 +223,21 @@ def main(username: str, tempdir: Path):
 
     with requests.Session() as session:
         session.headers.update({ "User-Agent": USER_AGENT })
-        for tweet_element in _fetch_tweet_elements(session, username):
+        # as of 2023-04-07, FetchSource.MEDIA returns nothing at all for accounts
+        # marked as age-restricted, see https://github.com/zedeus/nitter/issues/829
+        # FetchSource.SEARCH also only works for instances hosted in the US
+        fetch_source = FetchSource.SEARCH
+        NitterInstanceSwitcher.us_instances_only = True
+
+        if False:
+            _test_us_instances_for_age_restriction(session)
+            return
+
+        for tweet_element in _fetch_tweet_elements(session, username, fetch_source):
             try:
                 tweet_data = _parse_tweet_element(tweet_element)
                 downloaded_file_paths = _download_tweet_data(tweet_data, tempdir)
+                continue
                 _upload_files_to_mega(downloaded_file_paths, 'tw/' + username)
             except Exception:
                 traceback.print_exc()
@@ -228,7 +293,7 @@ def _download_tweet_data(tweet_data: TweetData, directory: Path):
     return downloaded_file_names
 
 
-def _fetch_tweet_elements(session: requests.Session, username: str) -> Generator[TweetElementWithInstance, None, None]:
+def _fetch_tweet_elements(session: requests.Session, username: str, source: FetchSource) -> Generator[TweetElementWithInstance, None, None]:
     tweet_selector = CSSSelector("div.timeline div.timeline-item:not(.show-more)")
     pagecount = 0
     instance_url = ''
@@ -241,7 +306,7 @@ def _fetch_tweet_elements(session: requests.Session, username: str) -> Generator
         if pages_until_instanceswitch <= 0:
             pages_until_instanceswitch = 3
             instance_url = _get_random_nitter_instance_url(session)
-        pagelink = f"{instance_url}/{username}/media{cursor}"
+        pagelink = f"{instance_url}/{username}/{source.name.lower()}{cursor}"
         print(f"request no. {pagecount} {pagelink}")
         response = session.get(pagelink)
         response.raise_for_status()
@@ -266,6 +331,10 @@ def _fetch_tweet_elements(session: requests.Session, username: str) -> Generator
             continue
 
         for tweet_element in tweet_selector(root):
+            if source == FetchSource.SEARCH:
+                # the search page includes retweets, which we don't want
+                if _safe_select('div.retweet-header', tweet_element) is not None:
+                    continue
             yield TweetElementWithInstance(instance_url, tweet_element)
 
         showmore_link: etree._Element = _safe_select("div.timeline-item + div.show-more > a[href]", root)
@@ -306,7 +375,7 @@ def _parse_tweet_author(tweet_element: TweetElementWithInstance) -> str:
 
 
 def _parse_tweet_date(tweet_element: TweetElementWithInstance) -> datetime:
-    fallback_date = datetime.fromtimestamp(0, tz=timezone.utc)
+    fallback_date: datetime = datetime.fromtimestamp(0, tz=timezone.utc)
     date_link = _safe_select(".tweet-date > a:first-child", tweet_element.element)
     if date_link is None:
         return fallback_date

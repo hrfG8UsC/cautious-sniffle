@@ -97,7 +97,7 @@ class NitterInstanceSwitcher():
         # instances that use Cloudflare are bad because it messes with the
         # .m3u8 video playlist files randomly; for list see
         # https://github.com/zedeus/nitter/wiki/Instances#public
-        "nitter.esmailelbob.xyz",  # old video format
+        # "nitter.esmailelbob.xyz",  # old video format  # should be resolved
         "nitter.domain.glass",  # cloudflare
         "nitter.winscloud.net",  # cloudflare
         "twtr.bch.bar",  # cloudflare
@@ -435,17 +435,25 @@ def _parse_tweet_gifs(tweet_element: TweetElementWithInstance) -> Generator[str,
 
 
 def _parse_tweet_video(tweet_element: TweetElementWithInstance) -> tuple[str, str]:
-    # this instance apparently uses a different format:
-    # https://nitter.esmailelbob.xyz/hypersupermia/status/1587660697235853313#m
     attachments_div = _safe_select("div.attachments", tweet_element.element)
     if attachments_div is None:
         return '', ''
     video_element = _safe_select(".video-container > video", attachments_div)
     if video_element is None:
         return '', ''
+    # the video_element on most instances looks like this:
+    # <video poster="/pic/..." data-url="/video/...m3u8></video>
+    # but on some instances (nitter.esmailelbob.xyz, nitter.tux.pizza) it looks like this:
+    # <video poster="/pic/..."><source src="https://video.twimg.com/...mp4" type="video/mp4"></video>
+    poster_url = video_element.get("poster")
+    video_url = video_element.get("data-url")
+    if video_url is None:
+        source_element = _safe_select("source", video_element)
+        if source_element is not None:
+            video_url = source_element.get("src")
     return (
-        tweet_element.instance_url + video_element.get("data-url"),
-        tweet_element.instance_url + video_element.get("poster")
+        tweet_element.instance_url + video_url,
+        tweet_element.instance_url + poster_url
     )
 
 

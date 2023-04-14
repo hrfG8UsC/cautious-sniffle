@@ -174,7 +174,7 @@ class NitterInstanceSwitcher():
 
         if hostname is False:
             return cls.new()  # try switch again
-        if not hostname or hostname in cls.bad_instances:
+        if not hostname or hostname in cls.bad_instances or (cls.us_instances_only and hostname in cls.us_instances_with_age_restriction):
             print(f'Nitter instance switch unsuccessful: bad instance "{hostname}"')
             return cls.new(session)  # try switch again
 

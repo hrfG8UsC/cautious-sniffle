@@ -525,9 +525,12 @@ if __name__ == "__main__":
         username = sys.argv[1]
         tempdir = Path("dl")
         tempdir.mkdir()
-        cmd = [FFMPEG_BIN, "-i", "https://nitter.freedit.eu/video/625656C3D808C/https%3A%2F%2Fvideo.twimg.com%2Fext_tw_video%2F1641960269072019457%2Fpu%2Fpl%2FtyRETRqJXhAaroAl.m3u8%3Ftag%3D12%26container%3Dfmp4%26v%3D465", "-c", "copy", "dl/tw_video_1681664553.5870426.mp4"]
-        cmd = [VSD_BIN, "save", "https://nitter.freedit.eu/video/625656C3D808C/https%3A%2F%2Fvideo.twimg.com%2Fext_tw_video%2F1641960269072019457%2Fpu%2Fpl%2FtyRETRqJXhAaroAl.m3u8%3Ftag%3D12%26container%3Dfmp4%26v%3D465", "-q", "highest", "-o", "dl/tw_video_1681664553.5870426.mp4"]
-        cmd = [VSD_BIN, "save", "https://cdn.jwplayer.com/manifests/pZxWPRg4.m3u8", "-q", "highest", "-o", "dl/tw_video_1681664553.5870426.mp4"]
+        video_url = "https://nitter.freedit.eu/video/625656C3D808C/https%3A%2F%2Fvideo.twimg.com%2Fext_tw_video%2F1641960269072019457%2Fpu%2Fpl%2FtyRETRqJXhAaroAl.m3u8%3Ftag%3D12%26container%3Dfmp4%26v%3D465"
+        video_url = "https://cdn.jwplayer.com/manifests/pZxWPRg4.m3u8"
+        video_url = "https%3A%2F%2Fvideo.twimg.com%2Fext_tw_video%2F1641960269072019457%2Fpu%2Fpl%2FtyRETRqJXhAaroAl.m3u8%3Ftag%3D12%26container%3Dfmp4%26v%3D465"
+        video_url = "https://video.twimg.com/ext_tw_video/1641960269072019457/pu/pl/tyRETRqJXhAaroAl.m3u8?tag=12&container=fmp4&v=465"
+        cmd = [FFMPEG_BIN, "-i", video_url, "-c", "copy", "dl/video.mp4"]
+        cmd = [VSD_BIN, "save", video_url, "-q", "highest", "-o", "dl/video.mp4"]
         print(cmd)
         subprocess.run(cmd, capture_output=True, check=True)
         #main(username, tempdir)

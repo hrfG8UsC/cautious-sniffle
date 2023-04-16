@@ -291,7 +291,7 @@ def _download_tweet_data(tweet_data: TweetData, directory: Path):
     if tweet_data.video_url:
         video_target = directory / f'tw_video_{t}.mp4'
         if USE_VSD_TO_DOWNLOAD_HLS_VIDEOS:
-            cmd = [VSD_BIN, "save", tweet_data.video_url, "-q", "highest", "o", str(video_target)]
+            cmd = [VSD_BIN, "save", tweet_data.video_url, "-q", "highest", "-o", str(video_target)]
         else:
             cmd = [FFMPEG_BIN, "-i", tweet_data.video_url, "-c", "copy", str(video_target)]
         print(cmd)
@@ -526,6 +526,7 @@ if __name__ == "__main__":
         tempdir = Path("dl")
         tempdir.mkdir()
         cmd = [FFMPEG_BIN, "-i", "https://nitter.freedit.eu/video/625656C3D808C/https%3A%2F%2Fvideo.twimg.com%2Fext_tw_video%2F1641960269072019457%2Fpu%2Fpl%2FtyRETRqJXhAaroAl.m3u8%3Ftag%3D12%26container%3Dfmp4%26v%3D465", "-c", "copy", "dl/tw_video_1681664553.5870426.mp4"]
+        cmd = [VSD_BIN, "save", "https://nitter.freedit.eu/video/625656C3D808C/https%3A%2F%2Fvideo.twimg.com%2Fext_tw_video%2F1641960269072019457%2Fpu%2Fpl%2FtyRETRqJXhAaroAl.m3u8%3Ftag%3D12%26container%3Dfmp4%26v%3D465", "-q", "highest", "-o", "dl/tw_video_1681664553.5870426.mp4"]
         print(cmd)
         subprocess.run(cmd, capture_output=True, check=True)
         #main(username, tempdir)

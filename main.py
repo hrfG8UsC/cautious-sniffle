@@ -519,7 +519,8 @@ if __name__ == "__main__":
         username = sys.argv[1]
         tempdir = Path("dl")
         tempdir.mkdir()
-        main(username, tempdir)
+        (tempdir / 'video.mp4').touch()
+        #main(username, tempdir)
     else:
         username = "skinnyboyonweb"
         username = "T4stytwink"

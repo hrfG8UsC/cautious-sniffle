@@ -159,8 +159,8 @@ class NitterInstanceSwitcher():
             world_globe_emoji = r'\U0001f30f\ufe0f?'
             emojis = '|'.join([us_flag_emoji, world_globe_emoji])
             pattern = re.compile(r'^\| *\[(.+?)\].*?\|.+?\|.+?\| *(?:' + emojis + r') *\|.+$', flags=re.M)
-            cls._us_instances = pattern.findall(instancelist_rawtext)
-        hostname = random.choice(cls._us_instances)
+            cls._us_instances = set(pattern.findall(instancelist_rawtext))
+        hostname = random.choice(list(cls._us_instances))
         try:
             response = session.get(f"https://{hostname}/twitter")
         except cls.request_errors as exc:
@@ -176,7 +176,7 @@ class NitterInstanceSwitcher():
             time.sleep(cls.sleepseconds)
 
         if True:
-            hostname = random.choice(cls.instances_with_old_video_format)
+            hostname = random.choice(list(cls.instances_with_old_video_format))
             try:
                 response = session.get(f"https://{hostname}/twitter")
             except cls.request_errors as exc:

@@ -284,6 +284,7 @@ def _download_tweet_data(tweet_data: TweetData, directory: Path):
     if tweet_data.video_url:
         video_target = directory / f'tw_video_{t}.mp4'
         cmd = [FFMPEG_BIN, "-i", tweet_data.video_url, "-c", "copy", str(video_target)]
+        print(cmd)
         subprocess.call(cmd)
         downloaded_file_names.append(video_target)
         thumb_target = directory / f'tw_thumb_{t}.jpg'

@@ -297,18 +297,24 @@ def _download_tweet_data(tweet_data: TweetData, directory: Path):
 
     if tweet_data.video_url:
         video_target = directory / f'tw_video_{t}.mp4'
-        if USE_VSD_TO_DOWNLOAD_HLS_VIDEOS:
-            cmd = [VSD_BIN, "save", tweet_data.video_url, "-q", "highest", "-o", str(video_target)]
+        video_url_suffix = Path(urlparse(tweet_data.video_url).path).suffix
+        if video_url_suffix == '.mp4':
+            # we got the tweet from an instance with the old format, which gave us the direct .mp4 link
+            _download_something_to_local_fs(tweet_data.video_url, video_target)
         else:
-            cmd = [FFMPEG_BIN, "-i", tweet_data.video_url, "-c", "copy", str(video_target)]
-        print(cmd)
-        try:
-            subprocess.run(cmd, capture_output=True, check=True)
-        except subprocess.CalledProcessError:
-            # most likely: a CORS error with the .m3u8 file
-            traceback.print_exc()
-        else:
-            downloaded_file_names.append(video_target)
+            # we got the tweet from an instance with HLS, which gave us a link to an .m3u8 file
+            if USE_VSD_TO_DOWNLOAD_HLS_VIDEOS:
+                cmd = [VSD_BIN, "save", tweet_data.video_url, "-q", "highest", "-o", str(video_target)]
+            else:
+                cmd = [FFMPEG_BIN, "-i", tweet_data.video_url, "-c", "copy", str(video_target)]
+            print(cmd)
+            try:
+                subprocess.run(cmd, capture_output=True, check=True)
+            except subprocess.CalledProcessError:
+                # most likely: a CORS error with the .m3u8 file
+                traceback.print_exc()
+            else:
+                downloaded_file_names.append(video_target)
         thumb_target = directory / f'tw_thumb_{t}.jpg'
         _download_something_to_local_fs(tweet_data.videothumb_url, thumb_target)
         downloaded_file_names.append(thumb_target)

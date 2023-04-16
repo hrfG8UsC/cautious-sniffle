@@ -33,7 +33,7 @@ jobs:
           touch x.m3u
           echo '#EXTM3U' >> x.m3u
           echo '#EXT-X-STREAM-INF:AVERAGE-BANDWIDTH=2176000,BANDWIDTH=2176000,RESOLUTION=720x1280,CODECS="mp4a.40.2,avc1.640020",SUBTITLES="subs"' >> x.m3u
-          echo '/video/7D134761D68C7/https%3A%2F%2Fvideo.twimg.com%2Fext_tw_video%2F1641960269072019457%2Fpu%2Fpl%2F720x1280%2FaPFgrQbuq7wvW61J.m3u8%3Fcontainer%3Dfmp4' >> x.m3u
+          echo 'https://nitter.freedit.eu/video/7D134761D68C7/https%3A%2F%2Fvideo.twimg.com%2Fext_tw_video%2F1641960269072019457%2Fpu%2Fpl%2F720x1280%2FaPFgrQbuq7wvW61J.m3u8%3Fcontainer%3Dfmp4' >> x.m3u
           cat x.m3u
           ffmpeg -i x.m3u -c copy dl/tw.mp4
       #- run: ffmpeg -i "https://nitter.freedit.eu/video/625656C3D808C/https%3A%2F%2Fvideo.twimg.com%2Fext_tw_video%2F1641960269072019457%2Fpu%2Fpl%2FtyRETRqJXhAaroAl.m3u8%3Ftag%3D12%26container%3Dfmp4%26v%3D465" -c copy dl/tw_video_1681664553.5870426b.mp4

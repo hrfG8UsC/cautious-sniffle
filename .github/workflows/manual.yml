@@ -27,6 +27,8 @@ jobs:
       #    MEGA_PASSWORD: ${{ secrets.MEGA_PASSWORD }}
 
       - run: mkdir dl
+      
+      - run: gdb -q hello
 
       - name: Run commands
         run: |

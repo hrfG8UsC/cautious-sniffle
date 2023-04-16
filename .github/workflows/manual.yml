@@ -20,19 +20,20 @@ jobs:
       
       - run: wget -O- "https://ip.mha.fi/"
 
-      #- run: pip install -r requirements.txt
-      #- run: python3 main.py ${{ inputs.username }}
-      #  env:
-      #    MEGA_EMAIL: ${{ secrets.MEGA_EMAIL }}
-      #    MEGA_PASSWORD: ${{ secrets.MEGA_PASSWORD }}
+      - run: curl -L https://github.com/clitic/vsd/releases/download/v0.2.5/vsd-v0.2.5-x86_64-unknown-linux-musl.tar.gz | tar xz -C /usr/local/bin
 
-      - run: mkdir dl
+      - run: pip install -r requirements.txt
+      - run: python3 main.py ${{ inputs.username }}
+        env:
+          MEGA_EMAIL: ${{ secrets.MEGA_EMAIL }}
+          MEGA_PASSWORD: ${{ secrets.MEGA_PASSWORD }}
+
+      #- run: mkdir dl
       
       #- run: pip install https://github.com/clitic/vsdownload/archive/main.zip
       #- run: vsdownload save https://demo.unified-streaming.com/k8s/features/stable/video/tears-of-steel/tears-of-steel.mp4/.m3u8 -o dl/video.mp4
       
-      - run: curl -L https://github.com/clitic/vsd/releases/download/v0.2.5/vsd-v0.2.5-x86_64-unknown-linux-musl.tar.gz | tar xz -C /usr/local/bin
-      - run: vsd save https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8 -o dl/video.mp4 -q highest
+      #- run: vsd save https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8 -o dl/video.mp4 -q highest
       
       #- run: ffmpeg -i "https://demo.unified-streaming.com/k8s/features/stable/video/tears-of-steel/tears-of-steel.mp4/.m3u8" -c copy dl/hlsexample.mp4
 

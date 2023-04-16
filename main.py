@@ -243,7 +243,11 @@ def main(username: str, tempdir: Path):
             _test_us_instances_for_age_restriction(session)
             return
 
+        i = 2
         for tweet_element in _fetch_tweet_elements(session, username, fetch_source):
+            i -= 1
+            if i < 0:
+                break
             try:
                 tweet_data = _parse_tweet_element(tweet_element)
                 downloaded_file_paths = _download_tweet_data(tweet_data, tempdir)
@@ -464,16 +468,15 @@ def _parse_tweet_video(tweet_element: TweetElementWithInstance) -> tuple[str, st
     # <video poster="/pic/..." data-url="/video/...m3u8></video>
     # but on some instances (nitter.esmailelbob.xyz, nitter.tux.pizza) it looks like this:
     # <video poster="/pic/..."><source src="https://video.twimg.com/...mp4" type="video/mp4"></video>
-    poster_url = video_element.get("poster")
+    poster_url = tweet_element.instance_url + video_element.get("poster")
     video_url = video_element.get("data-url")
     if video_url is None:
         source_element = _safe_select("source", video_element)
         if source_element is not None:
             video_url = source_element.get("src")
-    return (
-        tweet_element.instance_url + video_url,
-        tweet_element.instance_url + poster_url
-    )
+    else:
+        video_url = tweet_element.instance_url + video_url
+    return (video_url, poster_url)
 
 
 def _upload_files_to_mega(filepaths: Iterable[Path], target_folder_name: str):

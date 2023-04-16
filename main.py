@@ -28,6 +28,9 @@ mebibyte = 1024 ** 2
 CHUNK_SIZE = 300 * mebibyte # size for chunk-downloading of images and videos
 FFMPEG_BIN = "ffmpeg"
 
+USE_VSD_TO_DOWNLOAD_HLS_VIDEOS = True
+VSD_BIN = "vsd"
+
 one_page_only = False  # for debug
 
 IS_GH_ACTION = os.getenv("GITHUB_ACTION") is not None
@@ -287,7 +290,10 @@ def _download_tweet_data(tweet_data: TweetData, directory: Path):
 
     if tweet_data.video_url:
         video_target = directory / f'tw_video_{t}.mp4'
-        cmd = [FFMPEG_BIN, "-i", tweet_data.video_url, "-c", "copy", str(video_target)]
+        if USE_VSD_TO_DOWNLOAD_HLS_VIDEOS:
+            cmd = [VSD_BIN, "save", tweet_data.video_url, "-q", "highest", "o", str(video_target)]
+        else:
+            cmd = [FFMPEG_BIN, "-i", tweet_data.video_url, "-c", "copy", str(video_target)]
         print(cmd)
         subprocess.call(cmd)
         downloaded_file_names.append(video_target)

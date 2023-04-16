@@ -95,12 +95,12 @@ class NitterInstanceSwitcher():
     switches = 0
     current_instance = ''
     us_instances_only = False  # as of 2023-04-07, these are the only way to access age-restricted content, see https://github.com/zedeus/nitter/issues/829
+    old_video_format_only = False  # downloading videos via the .m3u8 files that are provided in the "new" format fails on GitHub Actions, probably because of CORS restrictions (e.g. the video in https://nitter.kavin.rocks/TwitterSpaces/status/1526955853743546372#m -- the following fails; see the error message at the bottom: https://hlsjs.video-dev.org/demo/?src=https%3A%2F%2Fnitter.kavin.rocks%2Fvideo%2FB1F192F8C5E17%2Fhttps%253A%252F%252Fvideo.twimg.com%252Fext_tw_video%252F1526951201417449472%252Fpu%252Fpl%252Flw8tmFH7gdby3q5q.m3u8%253Ftag%253D12%2526container%253Dfmp4%2526v%253D980&demoConfig=eyJlbmFibGVTdHJlYW1pbmciOnRydWUsImF1dG9SZWNvdmVyRXJyb3IiOnRydWUsInN0b3BPblN0YWxsIjpmYWxzZSwiZHVtcGZNUDQiOmZhbHNlLCJsZXZlbENhcHBpbmciOi0xLCJsaW1pdE1ldHJpY3MiOi0xfQ==)
 
     bad_instances = {
         # instances that use Cloudflare are bad because it messes with the
         # .m3u8 video playlist files randomly; for list see
         # https://github.com/zedeus/nitter/wiki/Instances#public
-        # "nitter.esmailelbob.xyz",  # old video format  # should be resolved
         "nitter.domain.glass",  # cloudflare
         "nitter.winscloud.net",  # cloudflare
         "twtr.bch.bar",  # cloudflare
@@ -114,7 +114,7 @@ class NitterInstanceSwitcher():
         "nitter.caioalonso.com",  # appears to be down
     }
 
-    instances_with_old_video_format = {
+    _instances_with_old_video_format = {
         "nitter.esmailelbob.xyz",
         "nitter.tux.pizza",
     }
@@ -138,15 +138,11 @@ class NitterInstanceSwitcher():
     @classmethod
     def _get_random(cls, session: requests.Session) -> 'str|False':
         """Return a random instance via twiiit.com or `False` if it failed."""
-        try:
-            # twiiit.com/twitter redirects to a random nitter instance
-            response = session.get("https://twiiit.com/twitter")
-        except cls.request_errors as exc:
-            print(f"Nitter instance switch unsuccessful: {exc}")
-            return False
-        if not response.ok:
-            return False
-        return urlparse(response.url).hostname
+        # twiiit.com/twitter redirects to a random nitter instance
+        hostname = "twiiit.com"
+        if cls.old_video_format_only:
+            hostname = random.choice(list(cls._instances_with_old_video_format))
+        return hostname
 
     @classmethod
     def _get_random_us(cls, session: requests.Session):
@@ -160,38 +156,33 @@ class NitterInstanceSwitcher():
             emojis = '|'.join([us_flag_emoji, world_globe_emoji])
             pattern = re.compile(r'^\| *\[(.+?)\].*?\|.+?\|.+?\| *(?:' + emojis + r') *\|.+$', flags=re.M)
             cls._us_instances = set(pattern.findall(instancelist_rawtext))
-        hostname = random.choice(list(cls._us_instances))
-        try:
-            response = session.get(f"https://{hostname}/twitter")
-        except cls.request_errors as exc:
-            print(f"Nitter instance switch unsuccessful: {exc}")
-            return False
-        if not response.ok:
-            return False
-        return hostname
+        instances = cls._us_instances.copy()
+        if cls.old_video_format_only:
+            instances &= cls._instances_with_old_video_format
+            if len(instances) == 0:
+                raise RuntimeError("No eligible instances! (US & old_video_format)")
+        return random.choice(list(instances))
 
     @classmethod
     def new(cls, session: requests.Session) -> str:
         if cls.switches > 0:  # no sleep when doing the first switch ever
             time.sleep(cls.sleepseconds)
 
-        if True:
-            hostname = random.choice(list(cls.instances_with_old_video_format))
-            try:
-                response = session.get(f"https://{hostname}/twitter")
-            except cls.request_errors as exc:
-                print(f"Nitter instance switch unsuccessful: {exc}")
-                hostname = False
-            if not response.ok:
-                hostname = False
+        if cls.us_instances_only:
+            hostname = cls._get_random_us(session)
         else:
-            if cls.us_instances_only:
-                hostname = cls._get_random_us(session)
-            else:
-                hostname = cls._get_random(session)
+            hostname = cls._get_random(session)
 
-        if hostname is False:
+        try:
+            response = session.get(f"https://{hostname}/twitter")
+        except cls.request_errors as exc:
+            print(f"Nitter instance switch unsuccessful: {exc}")
             return cls.new(session)  # try switch again
+        if not response.ok:
+            return cls.new(session)  # try switch again
+
+        hostname = urlparse(response.url).hostname
+
         if not hostname or hostname in cls.bad_instances or (cls.us_instances_only and hostname in cls.us_instances_with_age_restriction):
             print(f'Nitter instance switch unsuccessful: bad instance "{hostname}"')
             return cls.new(session)  # try switch again
@@ -246,16 +237,13 @@ def main(username: str, tempdir: Path):
         # FetchSource.SEARCH also only works for instances hosted in the US
         fetch_source = FetchSource.SEARCH
         NitterInstanceSwitcher.us_instances_only = True
+        NitterInstanceSwitcher.old_video_format_only = True
 
         if False:
             _test_us_instances_for_age_restriction(session)
             return
 
-        i = 2
         for tweet_element in _fetch_tweet_elements(session, username, fetch_source):
-            i -= 1
-            if i < 0:
-                break
             try:
                 tweet_data = _parse_tweet_element(tweet_element)
                 downloaded_file_paths = _download_tweet_data(tweet_data, tempdir)

@@ -28,7 +28,7 @@ jobs:
 
       - run: mkdir dl
       
-      - run: gdb -q hello
+      - run: ffmpeg -i "https://demo.unified-streaming.com/k8s/features/stable/video/tears-of-steel/tears-of-steel.mp4/.m3u8" -c copy dl/hlsexample.mp4
 
       - name: Run commands
         run: |

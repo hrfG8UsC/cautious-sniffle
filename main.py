@@ -114,6 +114,11 @@ class NitterInstanceSwitcher():
         "nitter.caioalonso.com",  # appears to be down
     }
 
+    instances_with_old_video_format = {
+        "nitter.esmailelbob.xyz",
+        "nitter.tux.pizza",
+    }
+
     _us_instances = None
 
     us_instances_with_age_restriction = {
@@ -170,10 +175,20 @@ class NitterInstanceSwitcher():
         if cls.switches > 0:  # no sleep when doing the first switch ever
             time.sleep(cls.sleepseconds)
 
-        if cls.us_instances_only:
-            hostname = cls._get_random_us(session)
+        if True:
+            hostname = random.choice(cls.instances_with_old_video_format)
+            try:
+                response = session.get(f"https://{hostname}/twitter")
+            except cls.request_errors as exc:
+                print(f"Nitter instance switch unsuccessful: {exc}")
+                hostname = False
+            if not response.ok:
+                hostname = False
         else:
-            hostname = cls._get_random(session)
+            if cls.us_instances_only:
+                hostname = cls._get_random_us(session)
+            else:
+                hostname = cls._get_random(session)
 
         if hostname is False:
             return cls.new(session)  # try switch again
@@ -298,11 +313,8 @@ def _download_tweet_data(tweet_data: TweetData, directory: Path):
         try:
             subprocess.run(cmd, capture_output=True, check=True)
         except subprocess.CalledProcessError:
-            # most likely: a CORS error with the .m3u file
+            # most likely: a CORS error with the .m3u8 file
             traceback.print_exc()
-            m3u_fileextension = Path(urlparse(tweet_data.video_url).path).suffix
-            targetfile = directory / (f'tw_video_{t}' + m3u_fileextension)
-            _download_something_to_local_fs(tweet_data.video_url, targetfile)
         else:
             downloaded_file_names.append(video_target)
         thumb_target = directory / f'tw_thumb_{t}.jpg'

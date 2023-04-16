@@ -223,6 +223,12 @@ TweetData = namedtuple("TweetData", [
 ])
 
 
+def _wait_after_request(r: requests.Response, *args, **kwargs):
+    wait_time = 5  # in seconds
+    print(f"Waiting after receiving request response: {wait_time} seconds...")
+    time.sleep(wait_time)
+
+
 def main(username: str, tempdir: Path):
     megalogger = logging.getLogger("mega")
     megalogger.setLevel(logging.DEBUG)
@@ -231,6 +237,7 @@ def main(username: str, tempdir: Path):
     megalogger.addHandler(print_to_console)
 
     with requests.Session() as session:
+        session.hooks['response'].append(_wait_after_request)  # wait a bit after every single request to avoid ratelimits
         session.headers.update({ "User-Agent": USER_AGENT })
         # as of 2023-04-07, FetchSource.MEDIA returns nothing at all for accounts
         # marked as age-restricted, see https://github.com/zedeus/nitter/issues/829
@@ -243,11 +250,13 @@ def main(username: str, tempdir: Path):
             _test_us_instances_for_age_restriction(session)
             return
 
-        i = 2
+        tweet_count = None
         for tweet_element in _fetch_tweet_elements(session, username, fetch_source):
-            i -= 1
-            if i < 0:
-                break
+            if tweet_count is not None:
+                tweet_count -= 1
+                if tweet_count < 0:
+                    break
+
             try:
                 tweet_data = _parse_tweet_element(tweet_element)
                 downloaded_file_paths = _download_tweet_data(tweet_data, tempdir)

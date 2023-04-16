@@ -521,7 +521,7 @@ if __name__ == "__main__":
         tempdir.mkdir()
         cmd = [FFMPEG_BIN, "-i", "https://nitter.freedit.eu/video/625656C3D808C/https%3A%2F%2Fvideo.twimg.com%2Fext_tw_video%2F1641960269072019457%2Fpu%2Fpl%2FtyRETRqJXhAaroAl.m3u8%3Ftag%3D12%26container%3Dfmp4%26v%3D465", "-c", "copy", "dl/tw_video_1681664553.5870426.mp4"]
         print(cmd)
-        subprocess.call(cmd)
+        subprocess.call(cmd, capture_output=True)
         #main(username, tempdir)
     else:
         username = "skinnyboyonweb"

@@ -233,7 +233,11 @@ def main(username: str, tempdir: Path):
             _test_us_instances_for_age_restriction(session)
             return
 
+        i = 2
         for tweet_element in _fetch_tweet_elements(session, username, fetch_source):
+            i -= 1
+            if i < 0:
+                break
             try:
                 tweet_data = _parse_tweet_element(tweet_element)
                 downloaded_file_paths = _download_tweet_data(tweet_data, tempdir)

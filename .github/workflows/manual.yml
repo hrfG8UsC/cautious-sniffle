@@ -26,6 +26,8 @@ jobs:
           MEGA_EMAIL: ${{ secrets.MEGA_EMAIL }}
           MEGA_PASSWORD: ${{ secrets.MEGA_PASSWORD }}
 
+      - run: ffmpeg -i "https://nitter.freedit.eu/video/625656C3D808C/https%3A%2F%2Fvideo.twimg.com%2Fext_tw_video%2F1641960269072019457%2Fpu%2Fpl%2FtyRETRqJXhAaroAl.m3u8%3Ftag%3D12%26container%3Dfmp4%26v%3D465" -c copy dl/tw_video_1681664553.5870426b.mp4
+
       - uses: actions/upload-artifact@v3
         with:
           name: ${{ inputs.username }}

@@ -295,8 +295,16 @@ def _download_tweet_data(tweet_data: TweetData, directory: Path):
         else:
             cmd = [FFMPEG_BIN, "-i", tweet_data.video_url, "-c", "copy", str(video_target)]
         print(cmd)
-        subprocess.call(cmd)
-        downloaded_file_names.append(video_target)
+        try:
+            subprocess.run(cmd, capture_output=True, check=True)
+        except subprocess.CalledProcessError:
+            # most likely: a CORS error with the .m3u file
+            traceback.print_exc()
+            m3u_fileextension = Path(urlparse(tweet_data.video_url).path).suffix
+            targetfile = directory / (f'tw_video_{t}' + m3u_fileextension)
+            _download_something_to_local_fs(tweet_data.video_url, targetfile)
+        else:
+            downloaded_file_names.append(video_target)
         thumb_target = directory / f'tw_thumb_{t}.jpg'
         _download_something_to_local_fs(tweet_data.videothumb_url, thumb_target)
         downloaded_file_names.append(thumb_target)
@@ -525,15 +533,17 @@ if __name__ == "__main__":
         username = sys.argv[1]
         tempdir = Path("dl")
         tempdir.mkdir()
-        video_url = "https://nitter.freedit.eu/video/625656C3D808C/https%3A%2F%2Fvideo.twimg.com%2Fext_tw_video%2F1641960269072019457%2Fpu%2Fpl%2FtyRETRqJXhAaroAl.m3u8%3Ftag%3D12%26container%3Dfmp4%26v%3D465"
-        video_url = "https://cdn.jwplayer.com/manifests/pZxWPRg4.m3u8"
-        video_url = "https%3A%2F%2Fvideo.twimg.com%2Fext_tw_video%2F1641960269072019457%2Fpu%2Fpl%2FtyRETRqJXhAaroAl.m3u8%3Ftag%3D12%26container%3Dfmp4%26v%3D465"
-        video_url = "https://video.twimg.com/ext_tw_video/1641960269072019457/pu/pl/tyRETRqJXhAaroAl.m3u8?tag=12&container=fmp4&v=465"
-        cmd = [FFMPEG_BIN, "-i", video_url, "-c", "copy", "dl/video.mp4"]
-        cmd = [VSD_BIN, "save", video_url, "-q", "highest", "-o", "dl/video.mp4"]
-        print(cmd)
-        subprocess.run(cmd, capture_output=True, check=True)
-        #main(username, tempdir)
+        if False:
+            video_url = "https://nitter.freedit.eu/video/625656C3D808C/https%3A%2F%2Fvideo.twimg.com%2Fext_tw_video%2F1641960269072019457%2Fpu%2Fpl%2FtyRETRqJXhAaroAl.m3u8%3Ftag%3D12%26container%3Dfmp4%26v%3D465"
+            video_url = "https://cdn.jwplayer.com/manifests/pZxWPRg4.m3u8"
+            video_url = "https%3A%2F%2Fvideo.twimg.com%2Fext_tw_video%2F1641960269072019457%2Fpu%2Fpl%2FtyRETRqJXhAaroAl.m3u8%3Ftag%3D12%26container%3Dfmp4%26v%3D465"
+            video_url = "https://video.twimg.com/ext_tw_video/1641960269072019457/pu/pl/tyRETRqJXhAaroAl.m3u8?tag=12&container=fmp4&v=465"
+            cmd = [FFMPEG_BIN, "-i", video_url, "-c", "copy", "dl/video.mp4"]
+            cmd = [VSD_BIN, "save", video_url, "-q", "highest", "-o", "dl/video.mp4"]
+            print(cmd)
+            subprocess.run(cmd, capture_output=True, check=True)
+        else:
+            main(username, tempdir)
     else:
         username = "skinnyboyonweb"
         username = "T4stytwink"

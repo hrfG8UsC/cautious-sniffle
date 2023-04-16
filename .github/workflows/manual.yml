@@ -26,6 +26,8 @@ jobs:
       #    MEGA_EMAIL: ${{ secrets.MEGA_EMAIL }}
       #    MEGA_PASSWORD: ${{ secrets.MEGA_PASSWORD }}
 
+      - run: apt-get nscd -y
+
       - run: mkdir dl
 
       - name: Run commands

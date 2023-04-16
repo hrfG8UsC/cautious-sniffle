@@ -29,7 +29,7 @@ jobs:
       - run: mkdir dl
       
       - run: pip install https://github.com/clitic/vsdownload/archive/main.zip
-      - run: python3 -m vsdownload save https://demo.unified-streaming.com/k8s/features/stable/video/tears-of-steel/tears-of-steel.mp4/.m3u8 -o dl/video.mp4
+      - run: vsdownload save https://demo.unified-streaming.com/k8s/features/stable/video/tears-of-steel/tears-of-steel.mp4/.m3u8 -o dl/video.mp4
       
       #- run: ffmpeg -i "https://demo.unified-streaming.com/k8s/features/stable/video/tears-of-steel/tears-of-steel.mp4/.m3u8" -c copy dl/hlsexample.mp4
 
